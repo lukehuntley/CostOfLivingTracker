@@ -1,75 +1,114 @@
 from datetime import datetime as dt, timedelta
 import pandas as pd
 import numpy as np
-# pd.options.mode.copy_on_write = True
+import logging
 
 class Transform():
 
-    def __init__(self, list_of_df:list, date_filter:str): 
+    def __init__(self, list_of_df:list): 
         self.list_of_df = list_of_df
-        self.date_filter = date_filter
 
-    def _append_dfs(self, list_of_df:list)->pd.DataFrame:
+    def _get_list_of_unique_dates(self, list_of_df:list )->list:
+
+        dates = []
+        
+        for df in list_of_df:
+
+            dates.append(df.attrs['name'].split('_')[1])
+
+        list_of_unique_dates = np.unique(dates)    
+        
+        return list_of_unique_dates  
+     
+    def _combine_dfs_by_date(self, list_of_df:list)->list:
         """
-        Append the df's     
+        Combine the df's     
         - `list_of_df`: a list of df's of transactions
 
         Returns a df with all the transactions
         """
 
-        combined_df = pd.DataFrame()
+        dates = self._get_list_of_unique_dates(list_of_df=list_of_df)
 
-        for df in list_of_df:
+        list_of_combined_dfs = []
 
-            if df.attrs['name'] == 'cdc':
+        for date in dates:
 
-                # Replace nan with blank string
-                df = df.replace(np.nan,'')
+            combined_df = pd.DataFrame()
 
-                # Drop uncessary columns
-                df = df[['Timestamp (UTC)', 'Transaction Description', 'Amount']]
+            for df in list_of_df:
 
-                # Rename these columns
-                df = df.rename(columns={'Timestamp (UTC)':'Date', 'Transaction Description': 'Description' })
+                df_bank_name  = df.attrs['name'].split('_')[0]
+                df_date = df.attrs['name'].split('_')[1]
+                df_user = df.attrs['name'].split('_')[2].split('.')[0]
 
-                # Convert date column from string to datetime
-                df['Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d %H:%M:%S').dt.strftime('%Y-%m-%d %H:%M:%S')
+                if df_date == date:
 
-            elif df.attrs['name'] == 'ing':
-                
-                # Replace nan with blank string
-                df = df.replace(np.nan,'') 
+                    if df_bank_name == 'cdc':
 
-                # Combine Debit and Credit columns
-                df["Amount"] = (df['Credit'].astype(str) + df["Debit"].astype(str)).astype(float)
+                        # Replace nan with blank string
+                        df = df.replace(np.nan,'')
 
-                # Drop unecessary columns
-                df = df.drop(columns=['Credit', 'Debit', 'Balance']) 
+                        # Drop uncessary columns
+                        df = df[['Timestamp (UTC)', 'Transaction Description', 'Amount']]
 
-                # Convert date column from string to datetime
-                df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y').dt.strftime('%Y-%m-%d %H:%M:%S')
+                        # Rename these columns
+                        df = df.rename(columns={'Timestamp (UTC)':'Date', 'Transaction Description': 'Description' })
 
-            # Union both df
-            combined_df = pd.concat((combined_df, df), axis=0)
+                        # Add user column
+                        df['User'] = df_user
 
-            # Convert date 
-            combined_df['Date'] = pd.to_datetime(combined_df['Date'], format='%Y-%m-%d %H:%M:%S')
-        
-        return combined_df
-    
-    def _transform_df(self, df:pd.DataFrame, date_filter:str)->pd.DataFrame:
+                        # Convert date column from string to datetime
+                        df['Date'] = pd.to_datetime(df['Date'], format='%Y-%m-%d %H:%M:%S').dt.strftime('%Y-%m-%d %H:%M:%S')
+
+                    elif df_bank_name == 'ing':
+                        
+                        # Replace nan with blank string
+                        df = df.replace(np.nan,'') 
+
+                        # Combine Debit and Credit columns
+                        df["Amount"] = (df['Credit'].astype(str) + df["Debit"].astype(str)).astype(float)
+
+                        # Drop unecessary columns
+                        df = df.drop(columns=['Credit', 'Debit', 'Balance']) 
+
+                        # Add user column
+                        df['User'] = df_user
+
+                        # Convert date column from string to datetime
+                        df['Date'] = pd.to_datetime(df['Date'], format='%d/%m/%Y').dt.strftime('%Y-%m-%d %H:%M:%S')
+
+                    # Union both df
+                    combined_df = pd.concat((combined_df, df), axis=0)
+
+                    # Convert date 
+                    combined_df['Date'] = pd.to_datetime(combined_df['Date'], format='%Y-%m-%d %H:%M:%S')
+                    
+                    combined_df.attrs['name'] = df_date
+
+                    # combined_df.to_csv(f'datecheck{df_date}')
+
+                    list_of_combined_dfs.append(combined_df)
+
+        return list_of_combined_dfs
+       
+    def _transform_df(self, df:pd.DataFrame)->pd.DataFrame:
         """
         Transform the df     
         - `df`: a df witha list of all transactions
-        - `date_filer': a date to filter for
 
         Returns a transformed df
         """
 
         # Filter for the month that is wanted
-        start_date = date_filter
+        start_date = str(pd.to_datetime(df.attrs['name'], format='%Y%m')) 
         end_date = str(pd.to_datetime(start_date, format='%Y-%m-%d') + pd.DateOffset(months=1))
-        df = df[(df['Date'] > start_date) & (df['Date'] < end_date)]
+
+        # df.to_csv(f"beforedatefilter{df.attrs['name']}.csv")
+
+        df = df[(df['Date'] >= start_date) & (df['Date'] < end_date)]
+
+        # df.to_csv(f"datefiler{df.attrs['name']}.csv")
 
         # Copy df to avoid warning error when filering
         df = df.copy()
@@ -81,92 +120,99 @@ class Transform():
         df = df.sort_values(by='Date', ascending=True)
 
         # Add new columns category
-        df['FriendlyDescription'] = ''
+        df['Friendly Description'] = ''
         df['Category'] = ''
         df['Sub Category'] = ''
 
-        # Populate FriendlyDescription column
+        # Populate Friendly Description column
         # Utilities        
-        df.loc[df['Description'].str.contains('netflix', case=False), 'FriendlyDescription'] = 'Netflix'
-        df.loc[df['Description'].str.contains('real debrid', case=False), 'FriendlyDescription'] = 'Real Debrid'
-        df.loc[df['Description'].str.contains('spotify', case=False), 'FriendlyDescription'] = 'Spotify'
-        df.loc[df['Description'].str.contains('synergy', case=False), 'FriendlyDescription'] = 'Synergy'
-        df.loc[df['Description'].str.contains('tangerine', case=False), 'FriendlyDescription'] = 'Tangerine Internet'        
-        df.loc[df['Description'].str.contains('telco', case=False), 'FriendlyDescription'] = 'Woolworths Mobile'
-        df.loc[df['Description'].str.contains('youtube', case=False), 'FriendlyDescription'] = 'Youtube'       
+        df.loc[df['Description'].str.contains('netflix', case=False), 'Friendly Description'] = 'Netflix'
+        df.loc[df['Description'].str.contains('real debrid', case=False), 'Friendly Description'] = 'Real Debrid'
+        df.loc[df['Description'].str.contains('spotify', case=False), 'Friendly Description'] = 'Spotify'
+        df.loc[df['Description'].str.contains('synergy', case=False), 'Friendly Description'] = 'Synergy'
+        df.loc[df['Description'].str.contains('tangerine', case=False), 'Friendly Description'] = 'Tangerine Internet'        
+        df.loc[df['Description'].str.contains('telco', case=False), 'Friendly Description'] = 'Woolworths Mobile'
+        df.loc[df['Description'].str.contains('youtube', case=False), 'Friendly Description'] = 'Youtube'       
                 
         # Shopping
-        df.loc[df['Description'].str.contains('aldi', case=False), 'FriendlyDescription'] = 'Aldi'
-        df.loc[df['Description'].str.contains('amazon mktplc', case=False), 'FriendlyDescription'] = 'Amazon'     
-        df.loc[df['Description'].str.contains('ams', case=False), 'FriendlyDescription'] = 'AMS'
-        df.loc[df['Description'].str.contains('big w', case=False), 'FriendlyDescription'] = 'Big W'
-        df.loc[df['Description'].str.contains('coles', case=False), 'FriendlyDescription'] = 'Coles'
-        df.loc[df['Description'].str.contains('ebay', case=False), 'FriendlyDescription'] = 'eBay'
-        df.loc[df['Description'].str.contains('five seasons fresh', case=False), 'FriendlyDescription'] = 'Five Seasons Fresh'
-        df.loc[df['Description'].str.contains('family fresh market', case=False), 'FriendlyDescription'] = 'Family Fresh Market'
-        df.loc[df['Description'].str.contains('iga', case=False), 'FriendlyDescription'] = 'IGA'        
-        df.loc[df['Description'].str.contains('kmart', case=False), 'FriendlyDescription'] = 'KMart'
-        df.loc[df['Description'].str.contains('ple computers', case=False), 'FriendlyDescription'] = 'PLE Computers'
-        df.loc[df['Description'].str.contains('red dot', case=False), 'FriendlyDescription'] = 'Red Dot'        
-        df.loc[df['Description'].str.contains('rise minimart', case=False), 'FriendlyDescription'] = 'Rise Minimart'
-        df.loc[df['Description'].str.contains('rise supermar', case=False), 'FriendlyDescription'] = 'Rise Supermarket'
-        df.loc[df['Description'].str.contains('subway', case=False), 'FriendlyDescription'] = 'Subway'
-        df.loc[df['Description'].str.contains('target', case=False), 'FriendlyDescription'] = 'Target'
-        df.loc[df['Description'].str.contains('the reject shop', case=False), 'FriendlyDescription'] = 'The Reject Shop'
-        df.loc[df['Description'].str.contains('thingz gifts', case=False), 'FriendlyDescription'] = 'Thingz Gifts'
-        df.loc[df['Description'].str.contains('woolworths', case=False), 'FriendlyDescription'] = 'Woolworths'    
+        df.loc[df['Description'].str.contains('aldi', case=False), 'Friendly Description'] = 'Aldi'
+        df.loc[df['Description'].str.contains('amazon|amazon mktplc', case=False), 'Friendly Description'] = 'Amazon'     
+        df.loc[df['Description'].str.contains('ams', case=False), 'Friendly Description'] = 'AMS'
+        df.loc[df['Description'].str.contains('big w', case=False), 'Friendly Description'] = 'Big W'
+        df.loc[df['Description'].str.contains('bunnings', case=False), 'Friendly Description'] = 'Bunnings'
+        df.loc[df['Description'].str.contains('coles', case=False), 'Friendly Description'] = 'Coles'
+        df.loc[df['Description'].str.contains('ebay', case=False), 'Friendly Description'] = 'eBay'
+        df.loc[df['Description'].str.contains('five seasons fresh', case=False), 'Friendly Description'] = 'Five Seasons Fresh'
+        df.loc[df['Description'].str.contains('family fresh market', case=False), 'Friendly Description'] = 'Family Fresh Market'
+        df.loc[df['Description'].str.contains('iga', case=False), 'Friendly Description'] = 'IGA'        
+        df.loc[df['Description'].str.contains('kmart', case=False), 'Friendly Description'] = 'KMart'
+        df.loc[df['Description'].str.contains('ple computers', case=False), 'Friendly Description'] = 'PLE Computers'
+        df.loc[df['Description'].str.contains('red dot', case=False), 'Friendly Description'] = 'Red Dot'        
+        df.loc[df['Description'].str.contains('rise minimart', case=False), 'Friendly Description'] = 'Rise Minimart'
+        df.loc[df['Description'].str.contains('rise supermar', case=False), 'Friendly Description'] = 'Rise Supermarket'
+        df.loc[df['Description'].str.contains('subway', case=False), 'Friendly Description'] = 'Subway'
+        df.loc[df['Description'].str.contains('target', case=False), 'Friendly Description'] = 'Target'
+        df.loc[df['Description'].str.contains('the reject shop', case=False), 'Friendly Description'] = 'The Reject Shop'
+        df.loc[df['Description'].str.contains('thingz gifts', case=False), 'Friendly Description'] = 'Thingz Gifts'
+        df.loc[df['Description'].str.contains('woolworths', case=False), 'Friendly Description'] = 'Woolworths'    
 
         # Recreation & Entertainment
-        df.loc[df['Description'].str.contains('adventure world|adventureworld', case=False), 'FriendlyDescription'] = 'Adventure World'
-        df.loc[df['Description'].str.contains('ben & jerrys', case=False), 'FriendlyDescription'] = 'Ben & Jerrys'
-        df.loc[df['Description'].str.contains('Cafe Zamia', case=False), 'FriendlyDescription'] = 'Cafe Zamia'
-        df.loc[df['Description'].str.contains('captain cook', case=False), 'FriendlyDescription'] = 'Captain Cook'
-        df.loc[df['Description'].str.contains('chu bakery', case=False), 'FriendlyDescription'] = 'Chu Bakery'        
-        df.loc[df['Description'].str.contains('cockburn ice arena', case=False), 'FriendlyDescription'] = 'Cockburn Ice Arena'
-        df.loc[df['Description'].str.contains('cracovia club', case=False), 'FriendlyDescription'] = 'Cracovia Club'
-        df.loc[df['Description'].str.contains('crown', case=False), 'FriendlyDescription'] = 'Crown'
-        df.loc[df['Description'].str.contains('dominos', case=False), 'FriendlyDescription'] = 'Dominos'
-        df.loc[df['Description'].str.contains('fry?d', case=False), 'FriendlyDescription'] = 'Fry?d'
-        df.loc[df['Description'].str.contains('grilld', case=False), 'FriendlyDescription'] = 'Grilld'
-        df.loc[df['Description'].str.contains('kfc', case=False), 'FriendlyDescription'] = 'KFC'        
-        df.loc[df['Description'].str.contains('infinity care', case=False), 'FriendlyDescription'] = 'Kinky Lizard'
-        df.loc[df['Description'].str.contains('nandos', case=False), 'FriendlyDescription'] = 'Nandos'
-        df.loc[df['Description'].str.contains('maruzzella', case=False), 'FriendlyDescription'] = 'Maruzzella'
-        df.loc[df['Description'].str.contains('menulog', case=False), 'FriendlyDescription'] = 'Menulog'
-        df.loc[df['Description'].str.contains('muffin|muffin break', case=False), 'FriendlyDescription'] = 'Muffin Break'
-        df.loc[df['Description'].str.contains('pinnacles dese', case=False), 'FriendlyDescription'] = 'Pinnacles Desert'
-        df.loc[df['Description'].str.contains('rise pizza', case=False), 'FriendlyDescription'] = 'Rise Pizza'
-        df.loc[df['Description'].str.contains('san churro', case=False), 'FriendlyDescription'] = 'San Churro'
-        df.loc[df['Description'].str.contains('six senses', case=False), 'FriendlyDescription'] = 'Six Senses' 
-        df.loc[df['Description'].str.contains('spur', case=False), 'FriendlyDescription'] = 'Spur' 
-        df.loc[df['Description'].str.contains('tao', case=False), 'FriendlyDescription'] = 'Tao Cafe'
-        df.loc[df['Description'].str.contains('tempayan', case=False), 'FriendlyDescription'] = 'Tempayan'
-        df.loc[df['Description'].str.contains('the coffee club', case=False), 'FriendlyDescription'] = 'The Coffee Club'
-        df.loc[df['Description'].str.contains('the local shack', case=False), 'FriendlyDescription'] = 'The Local Shack'
-        df.loc[df['Description'].str.contains('ticketmaster|ticket master', case=False), 'FriendlyDescription'] = 'Ticketmaster'               
+        df.loc[df['Description'].str.contains('adventure world|adventureworld', case=False), 'Friendly Description'] = 'Adventure World'
+        df.loc[df['Description'].str.contains('ben & jerrys', case=False), 'Friendly Description'] = 'Ben & Jerrys'
+        df.loc[df['Description'].str.contains('boost juice', case=False), 'Friendly Description'] = 'Boost Juice'
+        df.loc[df['Description'].str.contains('Cafe Zamia', case=False), 'Friendly Description'] = 'Cafe Zamia'
+        df.loc[df['Description'].str.contains('captain cook', case=False), 'Friendly Description'] = 'Captain Cook'
+        df.loc[df['Description'].str.contains('chu bakery', case=False), 'Friendly Description'] = 'Chu Bakery'        
+        df.loc[df['Description'].str.contains('cockburn ice arena', case=False), 'Friendly Description'] = 'Cockburn Ice Arena'
+        df.loc[df['Description'].str.contains('cracovia club', case=False), 'Friendly Description'] = 'Cracovia Club'
+        df.loc[df['Description'].str.contains('crown', case=False), 'Friendly Description'] = 'Crown'
+        df.loc[df['Description'].str.contains('dominos', case=False), 'Friendly Description'] = 'Dominos'
+        df.loc[df['Description'].str.contains('fry?d', case=False), 'Friendly Description'] = 'Fry?d'
+        df.loc[df['Description'].str.contains('grilld', case=False), 'Friendly Description'] = 'Grilld'
+        df.loc[df['Description'].str.contains('kfc', case=False), 'Friendly Description'] = 'KFC'        
+        df.loc[df['Description'].str.contains('infinity care', case=False), 'Friendly Description'] = 'Kinky Lizard'
+        df.loc[df['Description'].str.contains('nandos', case=False), 'Friendly Description'] = 'Nandos'
+        df.loc[df['Description'].str.contains('maruzzella', case=False), 'Friendly Description'] = 'Maruzzella'
+        df.loc[df['Description'].str.contains('menulog', case=False), 'Friendly Description'] = 'Menulog'
+        df.loc[df['Description'].str.contains('muffin|muffin break', case=False), 'Friendly Description'] = 'Muffin Break'
+        df.loc[df['Description'].str.contains('pinnacles dese', case=False), 'Friendly Description'] = 'Pinnacles Desert'
+        df.loc[df['Description'].str.contains('polish club sikorski', case=False), 'Friendly Description'] = 'Polish Club Sikorski'
+        df.loc[df['Description'].str.contains('rise pizza', case=False), 'Friendly Description'] = 'Rise Pizza'
+        df.loc[df['Description'].str.contains('san churro', case=False), 'Friendly Description'] = 'San Churro'
+        df.loc[df['Description'].str.contains('six senses', case=False), 'Friendly Description'] = 'Six Senses' 
+        df.loc[df['Description'].str.contains('spur', case=False), 'Friendly Description'] = 'Spur' 
+        df.loc[df['Description'].str.contains('tao', case=False), 'Friendly Description'] = 'Tao Cafe'
+        df.loc[df['Description'].str.contains('tempayan', case=False), 'Friendly Description'] = 'Tempayan'
+        df.loc[df['Description'].str.contains('the coffee club', case=False), 'Friendly Description'] = 'The Coffee Club'
+        df.loc[df['Description'].str.contains('the local shack', case=False), 'Friendly Description'] = 'The Local Shack'
+        df.loc[df['Description'].str.contains('ticketmaster|ticket master', case=False), 'Friendly Description'] = 'Ticketmaster'               
 
         # Transport
-        df.loc[df['Description'].str.contains('ampol', case=False), 'FriendlyDescription'] = 'Ampol'
-        df.loc[df['Description'].str.contains('burswood car rentals', case=False), 'FriendlyDescription'] = 'Burswood Car Rentals'
-        df.loc[df['Description'].str.contains('caltex', case=False), 'FriendlyDescription'] = 'Caltex'
-        df.loc[df['Description'].str.contains('city of perth parking|cpp', case=False), 'FriendlyDescription'] = 'City of Perth Parking'
-        df.loc[df['Description'].str.contains('on the run', case=False), 'FriendlyDescription'] = 'On The Run'
-        df.loc[df['Description'].str.contains('puma energy', case=False), 'FriendlyDescription'] = 'Puma energy'
-        df.loc[df['Description'].str.contains('united', case=False), 'FriendlyDescription'] = 'United'
-        df.loc[df['Description'].str.contains('vibe', case=False), 'FriendlyDescription'] = 'Vibe'
-        df.loc[df['Description'].str.contains('wilson parking', case=False), 'FriendlyDescription'] = 'Wilson Parking'
+        df.loc[df['Description'].str.contains('ampol', case=False), 'Friendly Description'] = 'Ampol'
+        df.loc[df['Description'].str.contains('atlas fuel', case=False), 'Friendly Description'] = 'Atlas'
+        df.loc[df['Description'].str.contains('burswood car rentals', case=False), 'Friendly Description'] = 'Burswood Car Rentals'
+        df.loc[df['Description'].str.contains('caltex', case=False), 'Friendly Description'] = 'Caltex'
+        df.loc[df['Description'].str.contains('city of perth parking|cpp', case=False), 'Friendly Description'] = 'City of Perth Parking'
+        df.loc[df['Description'].str.contains('on the run', case=False), 'Friendly Description'] = 'On The Run'
+        df.loc[df['Description'].str.contains('puma energy', case=False), 'Friendly Description'] = 'Puma energy'
+        df.loc[df['Description'].str.contains('uber', case=False), 'Friendly Description'] = 'Uber'
+        df.loc[df['Description'].str.contains('united', case=False), 'Friendly Description'] = 'United'
+        df.loc[df['Description'].str.contains('vibe', case=False), 'Friendly Description'] = 'Vibe'
+        df.loc[df['Description'].str.contains('wilson parking', case=False), 'Friendly Description'] = 'Wilson Parking'
 
         # Accommodation
-        df.loc[df['Description'].str.contains('deft rent', case=False), 'FriendlyDescription'] = 'M Property'
+        df.loc[df['Description'].str.contains('deft rent', case=False), 'Friendly Description'] = 'M Property'
 
         # Healthcare
-        df.loc[df['Description'].str.contains('chemistwarehouse', case=False), 'FriendlyDescription'] = 'Chemist Warehouse'
-        df.loc[df['Description'].str.contains('hcfhealth', case=False), 'FriendlyDescription'] = 'HCF'
-        df.loc[df['Description'].str.contains('pline ph', case=False), 'FriendlyDescription'] = 'Priceline Pharmacy'
-        df.loc[df['Description'].str.contains('wizard pharmacy', case=False), 'FriendlyDescription'] = 'Wizard Pharmacy'        
+        df.loc[df['Description'].str.contains('chemistwarehouse|chemist warehouse', case=False), 'Friendly Description'] = 'Chemist Warehouse'
+        df.loc[df['Description'].str.contains('hcfhealth', case=False), 'Friendly Description'] = 'HCF'
+        df.loc[df['Description'].str.contains('pline ph', case=False), 'Friendly Description'] = 'Priceline Pharmacy'
+        df.loc[df['Description'].str.contains('wan chang', case=False), 'Friendly Description'] = 'Wan Chang'
+        df.loc[df['Description'].str.contains('wizard pharmacy', case=False), 'Friendly Description'] = 'Wizard Pharmacy'  
+              
         
         # Populate categories column
-        utilities = df['FriendlyDescription'].str.contains(
+        utilities = df['Friendly Description'].str.contains(
             'Netflix|'  
             'Real Debrid|'
             'Spotify|'
@@ -176,11 +222,12 @@ class Transform():
             'Youtube'
             , case=False)
 
-        shopping = df['FriendlyDescription'].str.contains(            
+        shopping = df['Friendly Description'].str.contains(            
             'Aldi|'
             'Amazon|'
             'AMS|'
             'Big W|'
+            'Bunnings|'
             'Coles|'
             'eBay|'
             'Family Fresh Market|'
@@ -198,9 +245,10 @@ class Transform():
             'Woolworths'
             , case=False)
         
-        recreationentertainment = df['FriendlyDescription'].str.contains(
+        recreationentertainment = df['Friendly Description'].str.contains(
             'Adventure World|'
             'Ben & Jerrys|'
+            'Boost Juice|'
             'Cafe Zamia|'
             'Captain Cook|'
             'Chu Bakery|'
@@ -228,26 +276,29 @@ class Transform():
             'Ticketmaster'
             , case=False)
         
-        transport = df['FriendlyDescription'].str.contains(            
+        transport = df['Friendly Description'].str.contains(            
             'Ampol|'
+            'Atlas|'
             'Burswood Car Rentals|'
             'Caltex|'
             'City of Perth Parking|'
             'On The Run|'
             'Puma Energy|'
+            'Uber|'
             'United|'    
             'Vibe|'         
             'Wilson Parking'         
             , case=False)
         
-        accommodation = df['FriendlyDescription'].str.contains(
+        accommodation = df['Friendly Description'].str.contains(
             'M Property'
             , case=False)
         
-        healthcare = df['FriendlyDescription'].str.contains(
+        healthcare = df['Friendly Description'].str.contains(
             'Chemist Warehouse|'
             'HCF|'
             'Priceline Pharmacy|'
+            'Wan Chang|'
             'Wizard Pharmacy'
             , case=False)
             
@@ -268,10 +319,14 @@ class Transform():
 
         return df
     
-    def run(self)->pd.DataFrame:
+    def run(self)->list:
         
-        combined_df = self._append_dfs(list_of_df=self.list_of_df)
+        list_of_transformed_dfs = []
 
-        df = self._transform_df(df=combined_df, date_filter=self.date_filter)
+        list_of_combined_dfs = self._combine_dfs_by_date(list_of_df=self.list_of_df)
 
-        return df
+        for combined_df in list_of_combined_dfs:
+            transformed_df = self._transform_df(df=combined_df)
+            list_of_transformed_dfs.append(transformed_df)
+        
+        return list_of_transformed_dfs

@@ -1,7 +1,5 @@
 extract:
   path_to_seed_folder: '../seed/'
-transform:
-  date_filter: '2023-04-01'
 load:
   output_filename: '202304'  
   path_to_output_folder: '../../../analysis/data/'

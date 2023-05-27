@@ -14,13 +14,13 @@ class Extract():
         Returns a list of csv file paths
         """
 
-        # get list of file names
+        # Get list of file names
         list_of_csv_file_names = []
         for (dirpath, dirnames, filenames) in walk(path):
             
             list_of_csv_file_names.extend(filenames)
 
-        # get list of csv file paths
+        # Get list of csv file paths
         list_of_csv_file_paths = []
         for file in list_of_csv_file_names:
             file_path = path + file
@@ -40,11 +40,11 @@ class Extract():
 
         for file_path in list_of_csv_file_paths:          
 
-            bank_name = file_path.split('/')[2].split('_')[0]
+            df_name = file_path.split('/')[2].split('_')[0] + '_' + file_path.split('/')[2].split('_')[1] + '_' + file_path.split('/')[2].split('_')[2]
             
             df = pd.read_csv(file_path, sep=',')
             
-            df.attrs['name'] = bank_name
+            df.attrs['name'] = df_name
 
             list_of_df.append(df)
             

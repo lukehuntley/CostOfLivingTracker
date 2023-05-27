@@ -22,8 +22,6 @@ def run_pipeline():
     logging.info("Getting yaml config variables")
     path_to_seed_folder = config['extract']['path_to_seed_folder']
     path_to_output_folder = config['load']['path_to_output_folder']
-    date_filter = config['transform']['date_filter']  
-    output_filename = config['load']['output_filename'] 
 
     try:
 
@@ -34,18 +32,23 @@ def run_pipeline():
 
         # Transform transactions
         logging.info("Transforming")
-        transform_object = Transform(list_of_df = list_of_df, date_filter=date_filter)
-        transformed_df = transform_object.run()
+        transform_object = Transform(list_of_df = list_of_df)
+        list_of_transformed_dfs = transform_object.run()
 
         # Load transactions
         logging.info("Preparing Load nodes")
-        load_node = Load(df=transformed_df, path_to_output_folder=path_to_output_folder, output_filename=output_filename)
-        
+        list_of_load_nodes = []
+        for df in list_of_transformed_dfs:
+            output_filename = df.attrs['name']
+            load_node = Load(df=df, path_to_output_folder=path_to_output_folder, output_filename=output_filename)
+            list_of_load_nodes.append(load_node)
+
         # Build dag
         dag = TopologicalSorter()
         
         # Adding load node
-        dag.add(load_node)
+        for node in list_of_load_nodes:
+            dag.add(node)
 
         # Run dag
         logging.info("Running DAG")
