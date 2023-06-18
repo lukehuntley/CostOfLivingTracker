@@ -8,7 +8,7 @@ class Transform():
     def __init__(self, list_of_df:list): 
         self.list_of_df = list_of_df
 
-    def _get_list_of_unique_dates(self, list_of_df:list )->list:
+    def _get_list_of_unique_dates(self, list_of_df:list)->list:
 
         dates = []
         
@@ -86,8 +86,6 @@ class Transform():
                     
                     combined_df.attrs['name'] = df_date
 
-                    # combined_df.to_csv(f'datecheck{df_date}')
-
                     list_of_combined_dfs.append(combined_df)
 
         return list_of_combined_dfs
@@ -100,15 +98,16 @@ class Transform():
         Returns a transformed df
         """
 
+        logging.info(df.head(2))
+
         # Filter for the month that is wanted
         start_date = str(pd.to_datetime(df.attrs['name'], format='%Y%m')) 
-        end_date = str(pd.to_datetime(start_date, format='%Y-%m-%d') + pd.DateOffset(months=1))
+        logging.info(start_date)
 
-        # df.to_csv(f"beforedatefilter{df.attrs['name']}.csv")
+        end_date = str(pd.to_datetime(start_date, format='%Y-%m-%d %H:%M:%S') + pd.DateOffset(months=1))
+        logging.info(end_date)
 
         df = df[(df['Date'] >= start_date) & (df['Date'] < end_date)]
-
-        # df.to_csv(f"datefiler{df.attrs['name']}.csv")
 
         # Copy df to avoid warning error when filering
         df = df.copy()
@@ -140,6 +139,7 @@ class Transform():
         df.loc[df['Description'].str.contains('ams', case=False), 'Friendly Description'] = 'AMS'
         df.loc[df['Description'].str.contains('big w', case=False), 'Friendly Description'] = 'Big W'
         df.loc[df['Description'].str.contains('bunnings', case=False), 'Friendly Description'] = 'Bunnings'
+        df.loc[df['Description'].str.contains('carlton fresh', case=False), 'Friendly Description'] = 'Carlton Fresh'
         df.loc[df['Description'].str.contains('coles', case=False), 'Friendly Description'] = 'Coles'
         df.loc[df['Description'].str.contains('ebay', case=False), 'Friendly Description'] = 'eBay'
         df.loc[df['Description'].str.contains('five seasons fresh', case=False), 'Friendly Description'] = 'Five Seasons Fresh'
@@ -150,13 +150,15 @@ class Transform():
         df.loc[df['Description'].str.contains('red dot', case=False), 'Friendly Description'] = 'Red Dot'        
         df.loc[df['Description'].str.contains('rise minimart', case=False), 'Friendly Description'] = 'Rise Minimart'
         df.loc[df['Description'].str.contains('rise supermar', case=False), 'Friendly Description'] = 'Rise Supermarket'
-        df.loc[df['Description'].str.contains('subway', case=False), 'Friendly Description'] = 'Subway'
+        df.loc[df['Description'].str.contains('spud shed', case=False), 'Friendly Description'] = 'Spud Shed'
         df.loc[df['Description'].str.contains('target', case=False), 'Friendly Description'] = 'Target'
+        df.loc[df['Description'].str.contains('tentworld', case=False), 'Friendly Description'] = 'Tentworld'
         df.loc[df['Description'].str.contains('the reject shop', case=False), 'Friendly Description'] = 'The Reject Shop'
         df.loc[df['Description'].str.contains('thingz gifts', case=False), 'Friendly Description'] = 'Thingz Gifts'
         df.loc[df['Description'].str.contains('woolworths', case=False), 'Friendly Description'] = 'Woolworths'    
 
-        # Recreation & Entertainment
+        # Recreation & Entertainment        
+        df.loc[df['Description'].str.contains('airbnb', case=False), 'Friendly Description'] = 'Airbnb'
         df.loc[df['Description'].str.contains('adventure world|adventureworld', case=False), 'Friendly Description'] = 'Adventure World'
         df.loc[df['Description'].str.contains('ben & jerrys', case=False), 'Friendly Description'] = 'Ben & Jerrys'
         df.loc[df['Description'].str.contains('boost juice', case=False), 'Friendly Description'] = 'Boost Juice'
@@ -181,6 +183,8 @@ class Transform():
         df.loc[df['Description'].str.contains('san churro', case=False), 'Friendly Description'] = 'San Churro'
         df.loc[df['Description'].str.contains('six senses', case=False), 'Friendly Description'] = 'Six Senses' 
         df.loc[df['Description'].str.contains('spur', case=False), 'Friendly Description'] = 'Spur' 
+        df.loc[df['Description'].str.contains('strike', case=False), 'Friendly Description'] = 'Strike'
+        df.loc[df['Description'].str.contains('subway', case=False), 'Friendly Description'] = 'Subway' 
         df.loc[df['Description'].str.contains('tao', case=False), 'Friendly Description'] = 'Tao Cafe'
         df.loc[df['Description'].str.contains('tempayan', case=False), 'Friendly Description'] = 'Tempayan'
         df.loc[df['Description'].str.contains('the coffee club', case=False), 'Friendly Description'] = 'The Coffee Club'
@@ -205,7 +209,7 @@ class Transform():
 
         # Healthcare
         df.loc[df['Description'].str.contains('chemistwarehouse|chemist warehouse', case=False), 'Friendly Description'] = 'Chemist Warehouse'
-        df.loc[df['Description'].str.contains('hcfhealth', case=False), 'Friendly Description'] = 'HCF'
+        df.loc[df['Description'].str.contains('hcfhealth|hcf', case=False), 'Friendly Description'] = 'HCF'
         df.loc[df['Description'].str.contains('pline ph', case=False), 'Friendly Description'] = 'Priceline Pharmacy'
         df.loc[df['Description'].str.contains('wan chang', case=False), 'Friendly Description'] = 'Wan Chang'
         df.loc[df['Description'].str.contains('wizard pharmacy', case=False), 'Friendly Description'] = 'Wizard Pharmacy'  
@@ -238,14 +242,16 @@ class Transform():
             'Red Dot|'
             'Rise Minimart|'
             'Rise Supermarket|'
-            'Subway|'
+            'Spud Shed|'
             'Target|'
+            'Tentworld|'
             'The Reject Shop|'            
             'Thingz Gifts|'
             'Woolworths'
             , case=False)
         
         recreationentertainment = df['Friendly Description'].str.contains(
+            'Airbnb|'
             'Adventure World|'
             'Ben & Jerrys|'
             'Boost Juice|'
@@ -268,7 +274,9 @@ class Transform():
             'Rise Pizza|' 
             'San Churro|'
             'Six Senses|'
-            'Spur|'    
+            'Spur|'
+            'Strike|'
+            'Subway|'    
             'Tao Cafe|'
             'Tempayan|'                  
             'The Local Shack|'
@@ -325,8 +333,12 @@ class Transform():
 
         list_of_combined_dfs = self._combine_dfs_by_date(list_of_df=self.list_of_df)
 
+        logging.info(len(list_of_combined_dfs))
+
         for combined_df in list_of_combined_dfs:
             transformed_df = self._transform_df(df=combined_df)
             list_of_transformed_dfs.append(transformed_df)
         
+        logging.info(len(list_of_transformed_dfs))
+
         return list_of_transformed_dfs

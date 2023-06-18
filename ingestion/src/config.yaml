@@ -1,5 +1,4 @@
 extract:
   path_to_seed_folder: '../seed/'
 load:
-  output_filename: '202304'  
   path_to_output_folder: '../../../analysis/data/'
